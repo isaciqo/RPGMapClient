@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TableRise — Campanhas</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="campaigns-page">
+  <header class="top-bar">
+    <div class="top-bar-brand">⚔️ TableRise</div>
+    <div class="top-bar-user">
+      <span id="header-username"></span>
+      <button class="btn btn-ghost" id="logout-btn">Sair</button>
+    </div>
+  </header>
+
+  <main class="campaigns-main">
+    <div class="campaigns-header">
+      <h1>Suas Campanhas</h1>
+      <div class="campaigns-header-actions">
+        <button class="btn btn-ghost" id="join-by-code-btn">Entrar por código</button>
+        <button class="btn btn-primary" id="create-campaign-btn">+ Nova Campanha</button>
+      </div>
+    </div>
+
+    <div id="campaigns-error" class="auth-error hidden"></div>
+
+    <div id="campaigns-list" class="campaigns-grid">
+      <div class="campaigns-loading">Carregando campanhas...</div>
+    </div>
+  </main>
+
+  <!-- Modal: Criar Campanha -->
+  <div id="create-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="create-modal-title">Nova Campanha</h3>
+        <button class="modal-close" id="modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Step 1: Formulário -->
+        <form id="create-campaign-form">
+          <div class="form-group">
+            <label for="campaign-name">Nome da Campanha</label>
+            <input type="text" id="campaign-name" required placeholder="Ex: A Maldição de Strahd" maxlength="80" />
+          </div>
+          <div id="create-campaign-error" class="auth-error hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" id="modal-cancel-btn">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="create-campaign-submit">
+              <span class="btn-text">Criar</span>
+              <span class="btn-loading hidden">Criando...</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Step 2: Sucesso (oculto inicialmente) -->
+        <div id="create-campaign-success" class="hidden">
+          <div class="campaign-created-info">
+            <div class="campaign-created-row">
+              <span class="campaign-created-label">Campanha</span>
+              <span id="created-campaign-name" class="campaign-created-value"></span>
+            </div>
+            <div class="campaign-created-row">
+              <span class="campaign-created-label">Mestre</span>
+              <span id="created-master-name" class="campaign-created-value"></span>
+            </div>
+            <div class="campaign-created-row">
+              <span class="campaign-created-label">Código</span>
+              <div class="campaign-created-code-wrap">
+                <code id="created-campaign-code" class="campaign-code-value" style="font-size:13px"></code>
+                <button class="btn-copy" id="created-copy-btn" title="Copiar código">⧉</button>
+              </div>
+            </div>
+            <div class="campaign-created-row">
+              <span class="campaign-created-label">ID</span>
+              <div class="campaign-created-code-wrap">
+                <code id="created-campaign-id" class="campaign-code-value" style="font-size:11px;color:var(--text-dim)"></code>
+                <button class="btn-copy" id="created-copy-id-btn" title="Copiar ID">⧉</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions" style="margin-top:16px">
+            <button type="button" class="btn btn-ghost" id="created-close-btn">Fechar</button>
+            <button type="button" class="btn btn-primary" id="created-enter-btn">Entrar na Campanha</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Entrar por Código -->
+  <div id="join-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Entrar por Código</h3>
+        <button class="modal-close" id="join-modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="join-by-code-form">
+          <div class="form-group">
+            <label for="campaign-code">Código da Campanha</label>
+            <input type="text" id="campaign-code" required placeholder="Ex: a-maldicao-de-strahd" />
+            <small style="color:var(--text-dim);font-size:12px;margin-top:4px;display:block">
+              Peça o código para o Mestre da campanha.
+            </small>
+          </div>
+          <div id="join-by-code-error" class="auth-error hidden"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" id="join-modal-cancel-btn">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="join-by-code-submit">
+              <span class="btn-text">Entrar</span>
+              <span class="btn-loading hidden">Entrando...</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Detalhes da Campanha -->
+  <div id="detail-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="detail-campaign-name"></h3>
+        <button class="modal-close" id="detail-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="campaign-created-info">
+          <div class="campaign-created-row">
+            <span class="campaign-created-label">Mestre</span>
+            <span id="detail-master-name" class="campaign-created-value"></span>
+          </div>
+          <div class="campaign-created-row">
+            <span class="campaign-created-label">Jogadores</span>
+            <span id="detail-players" class="campaign-created-value"></span>
+          </div>
+          <div class="campaign-created-row">
+            <span class="campaign-created-label">Criada em</span>
+            <span id="detail-created-at" class="campaign-created-value"></span>
+          </div>
+          <div class="campaign-created-row" id="detail-code-row">
+            <span class="campaign-created-label">Código</span>
+            <div class="campaign-created-code-wrap">
+              <code id="detail-campaign-code" class="campaign-code-value" style="font-size:13px"></code>
+              <button class="btn-copy" id="detail-copy-code-btn" title="Copiar código">⧉</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="detail-error" class="auth-error hidden" style="margin-top:12px"></div>
+
+        <div class="modal-actions" style="margin-top:16px">
+          <!-- Botão Sair (só jogadores) -->
+          <button type="button" class="btn btn-danger hidden" id="detail-leave-btn">
+            <span class="btn-text">Sair da Campanha</span>
+            <span class="btn-loading hidden">Saindo...</span>
+          </button>
+          <!-- Botão Deletar (só mestre) -->
+          <button type="button" class="btn btn-danger hidden" id="detail-delete-btn">
+            <span class="btn-text">Deletar Campanha</span>
+            <span class="btn-loading hidden">Deletando...</span>
+          </button>
+          <button type="button" class="btn btn-primary" id="detail-play-btn">Jogar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/campaigns.js"></script>
+</body>
+</html>

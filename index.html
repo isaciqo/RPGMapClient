@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TableRise — Login</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="auth-logo">
+      <h1>⚔️ TableRise</h1>
+      <p>RPG de Mesa Virtual</p>
+    </div>
+
+    <!-- Login Form -->
+    <form id="login-form" class="auth-form" autocomplete="off">
+      <h2>Entrar</h2>
+      <div class="form-group">
+        <label for="login-username">Usuário</label>
+        <input type="text" id="login-username" name="username" required placeholder="Seu nome de usuário" />
+      </div>
+      <div class="form-group">
+        <label for="login-password">Senha</label>
+        <input type="password" id="login-password" name="password" required placeholder="Sua senha" />
+      </div>
+      <div id="login-error" class="auth-error hidden"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="login-btn">
+        <span class="btn-text">Entrar</span>
+        <span class="btn-loading hidden">Entrando...</span>
+      </button>
+      <p class="auth-link">Não tem conta? <a href="#" id="show-register">Registre-se</a></p>
+    </form>
+
+    <!-- Register Form -->
+    <form id="register-form" class="auth-form hidden" autocomplete="off">
+      <h2>Criar Conta</h2>
+      <div class="form-group">
+        <label for="reg-username">Usuário</label>
+        <input type="text" id="reg-username" name="username" required placeholder="Escolha um nome de usuário" />
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Senha</label>
+        <input type="password" id="reg-password" name="password" required placeholder="Escolha uma senha" />
+      </div>
+      <div class="form-group">
+        <label for="reg-confirm">Confirmar Senha</label>
+        <input type="password" id="reg-confirm" name="confirm" required placeholder="Repita a senha" />
+      </div>
+      <div id="register-error" class="auth-error hidden"></div>
+      <div id="register-success" class="auth-success hidden"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="register-btn">
+        <span class="btn-text">Criar Conta</span>
+        <span class="btn-loading hidden">Criando...</span>
+      </button>
+      <p class="auth-link">Já tem conta? <a href="#" id="show-login">Entrar</a></p>
+    </form>
+  </div>
+
+  <script src="js/auth.js"></script>
+</body>
+</html>

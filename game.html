@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TableRise — Jogo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="game-page">
+
+  <!-- Sidebar Esquerda: chat, log de dados, ações -->
+  <aside class="sidebar sidebar-left">
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">⚔️ TableRise</h3>
+      <div id="game-campaign-name" class="campaign-label"></div>
+    </div>
+
+    <!-- Ações do mapa -->
+    <div class="sidebar-section">
+      <h4 class="section-label">Adicionar ao Mapa</h4>
+      <div class="action-buttons">
+        <button class="btn btn-secondary btn-block" id="add-player-btn">+ Personagem</button>
+        <button class="btn btn-secondary btn-block" id="add-image-btn">+ Imagem</button>
+      </div>
+      <div id="change-bg-wrapper" class="hidden">
+        <button class="btn btn-ghost btn-block" id="change-bg-btn">🖼 Mudar Fundo</button>
+        <input type="file" id="change-bg-input" accept="image/*" class="hidden" />
+      </div>
+    </div>
+
+    <!-- Sistema de dados -->
+    <div class="sidebar-section">
+      <h4 class="section-label">Dados</h4>
+      <div class="dice-grid" id="dice-grid">
+        <!-- Gerado por dice.js -->
+      </div>
+    </div>
+
+    <!-- Log de dados -->
+    <div class="sidebar-section dice-log-section">
+      <h4 class="section-label">Log de Dados</h4>
+      <div id="dice-log" class="dice-log"></div>
+    </div>
+
+    <!-- Chat -->
+    <div class="sidebar-section chat-section">
+      <h4 class="section-label">Chat</h4>
+      <div id="chat-messages" class="chat-messages"></div>
+      <form id="chat-form" class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Mensagem..." maxlength="300" autocomplete="off" />
+        <button type="submit" class="btn btn-primary">↵</button>
+      </form>
+    </div>
+
+    <div class="sidebar-bottom">
+      <span id="sidebar-username" class="user-badge"></span>
+      <a href="campaigns.html" class="btn btn-ghost btn-sm">← Sair</a>
+    </div>
+  </aside>
+
+  <!-- Área central: mapa -->
+  <main class="map-container">
+    <div id="map">
+      <!-- Objetos são inseridos aqui pelo game.js -->
+    </div>
+  </main>
+
+  <!-- Sidebar Direita: biblioteca de imagens -->
+  <aside class="sidebar sidebar-right">
+    <div class="sidebar-section">
+      <h4 class="sidebar-title">🖼 Biblioteca</h4>
+      <p class="sidebar-hint">Clique numa imagem para aplicar ao objeto selecionado.</p>
+    </div>
+    <div class="sidebar-section">
+      <button class="btn btn-secondary btn-block" id="upload-library-btn">+ Enviar Imagem</button>
+      <input type="file" id="library-upload-input" accept="image/*" class="hidden" />
+    </div>
+    <div id="image-library" class="image-library">
+      <p class="library-empty">Nenhuma imagem ainda.</p>
+    </div>
+  </aside>
+
+  <!-- Input oculto para upload em objeto -->
+  <input type="file" id="object-image-input" accept="image/*" class="hidden" />
+
+  <!-- Socket.IO (servido pelo servidor) -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Módulos -->
+  <script src="js/socket.js"></script>
+  <script src="js/dice.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
