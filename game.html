@@ -25,6 +25,40 @@
       <div id="change-bg-wrapper" class="hidden">
         <button class="btn btn-ghost btn-block" id="change-bg-btn">🖼 Mudar Fundo</button>
         <input type="file" id="change-bg-input" accept="image/*" class="hidden" />
+
+        <!-- Controles de exibição do fundo — só aparecem quando há uma imagem -->
+        <div id="bg-controls" class="bg-controls hidden">
+          <p class="bg-controls-label">Exibição do fundo</p>
+
+          <!-- Modo de ajuste -->
+          <div class="bg-fit-row">
+            <button class="bg-fit-btn active" data-fit="cover"   title="Cobrir (corta para preencher)">Cover</button>
+            <button class="bg-fit-btn"        data-fit="contain" title="Conter (mostra a imagem inteira)">Contain</button>
+            <button class="bg-fit-btn"        data-fit="tile"    title="Repetir em grade">Tile</button>
+            <button class="bg-fit-btn"        data-fit="stretch" title="Esticar para preencher">Stretch</button>
+          </div>
+
+          <!-- Posição X -->
+          <div class="bg-slider-row">
+            <span class="bg-slider-label">X</span>
+            <input type="range" id="bg-pos-x" min="0" max="100" value="50" class="bg-slider" />
+            <span class="bg-slider-val" id="bg-pos-x-val">50%</span>
+          </div>
+
+          <!-- Posição Y -->
+          <div class="bg-slider-row">
+            <span class="bg-slider-label">Y</span>
+            <input type="range" id="bg-pos-y" min="0" max="100" value="50" class="bg-slider" />
+            <span class="bg-slider-val" id="bg-pos-y-val">50%</span>
+          </div>
+
+          <!-- Escala (Tile) -->
+          <div class="bg-slider-row" id="bg-scale-row">
+            <span class="bg-slider-label">Zoom</span>
+            <input type="range" id="bg-scale" min="10" max="300" value="100" class="bg-slider" />
+            <span class="bg-slider-val" id="bg-scale-val">100%</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -58,15 +92,60 @@
     </div>
   </aside>
 
-  <!-- Área central: mapa -->
-  <main class="map-container">
-    <div id="map">
-      <!-- Objetos são inseridos aqui pelo game.js -->
+  <!-- Área central: toolbar + mapa -->
+  <main class="map-area">
+
+    <!-- Barra de ferramentas de desenho -->
+    <div class="draw-toolbar" id="draw-toolbar">
+      <div class="tool-group">
+        <button class="tool-btn active" data-tool="select" title="Selecionar (Esc)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2l10 5-5 1.5L5 14z"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="pen" title="Caneta Mágica — desaparece ao soltar">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 13L6 9l6-6 1.5 1.5-6 6-3 1z"/><circle cx="13.5" cy="2.5" r="1.2" fill="currentColor"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="circle" title="Círculo persistente">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="8" rx="5.5" ry="5.5"/></svg>
+        </button>
+        <button class="tool-btn" data-tool="rect" title="Retângulo persistente">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="12" height="8" rx="1"/></svg>
+        </button>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <div class="tool-group tool-group-inline">
+        <label class="tool-label" for="draw-color">Cor</label>
+        <input type="color" id="draw-color" value="#e94560" class="tool-color" title="Cor do desenho" />
+      </div>
+
+      <div class="tool-group tool-group-inline">
+        <label class="tool-label" for="draw-thickness">Espessura</label>
+        <input type="range" id="draw-thickness" min="1" max="20" value="3" class="tool-range" />
+        <span id="draw-thickness-val" class="tool-range-val">3px</span>
+      </div>
+
+      <div class="tool-hint" id="tool-hint">Selecionar: clique e arraste objetos</div>
     </div>
+
+    <!-- Mapa centralizado -->
+    <div class="map-container">
+      <div id="map">
+        <!-- Canvas remoto: traços de OUTROS usuários (caneta mágica) -->
+        <canvas id="draw-canvas-remote"></canvas>
+        <!-- Canvas local: traço do usuário atual + preview de formas -->
+        <canvas id="draw-canvas"></canvas>
+        <!-- SVG: formas persistentes -->
+        <svg id="draw-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <!-- Objetos são inseridos aqui pelo game.js -->
+      </div>
+    </div>
+
   </main>
 
-  <!-- Sidebar Direita: biblioteca de imagens -->
+  <!-- Sidebar Direita: biblioteca de imagens + formas -->
   <aside class="sidebar sidebar-right">
+    <!-- Biblioteca de Imagens -->
     <div class="sidebar-section">
       <h4 class="sidebar-title">🖼 Biblioteca</h4>
       <p class="sidebar-hint">Clique numa imagem para aplicar ao objeto selecionado.</p>
@@ -75,8 +154,14 @@
       <button class="btn btn-secondary btn-block" id="upload-library-btn">+ Enviar Imagem</button>
       <input type="file" id="library-upload-input" accept="image/*" class="hidden" />
     </div>
-    <div id="image-library" class="image-library">
-      <p class="library-empty">Nenhuma imagem ainda.</p>
+    <div id="image-library" class="image-library"></div>
+
+    <!-- Formas Desenhadas -->
+    <div class="sidebar-section shapes-header">
+      <h4 class="sidebar-title">✏ Formas</h4>
+    </div>
+    <div id="shapes-list" class="shapes-list">
+      <p class="library-empty">Nenhuma forma ainda.</p>
     </div>
   </aside>
 
@@ -84,10 +169,24 @@
   <input type="file" id="object-image-input" accept="image/*" class="hidden" />
 
   <!-- Socket.IO (servido pelo servidor) -->
-  <script src="/socket.io/socket.io.js"></script>
-  <!-- Módulos -->
-  <script src="js/socket.js"></script>
-  <script src="js/dice.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/config.js"></script>
+  <script>
+    // Carrega socket.io.js do backend e só então inicializa os módulos
+    (function () {
+      var sio = document.createElement('script');
+      sio.src = window.API_BASE + '/socket.io/socket.io.js';
+      sio.onload = function () {
+        ['js/socket.js', 'js/dice.js', 'js/game.js'].forEach(function (src) {
+          var s = document.createElement('script');
+          s.src = src;
+          document.body.appendChild(s);
+        });
+      };
+      sio.onerror = function () {
+        console.error('[config] Falha ao carregar socket.io.js de ' + sio.src);
+      };
+      document.head.appendChild(sio);
+    })();
+  </script>
 </body>
 </html>

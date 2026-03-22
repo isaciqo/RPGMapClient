@@ -3,7 +3,7 @@
  * Tela: index.html
  */
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = window.API_BASE;
 
 // ── Elementos ───────────────────────────────────────────────
 const loginForm      = document.getElementById('login-form');

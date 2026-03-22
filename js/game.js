@@ -60,6 +60,28 @@
   const libraryContainer = document.getElementById('image-library');
   const libraryUploadInput = document.getElementById('library-upload-input');
 
+  // ── Elementos de desenho ──────────────────────────────────
+  const drawCanvas       = document.getElementById('draw-canvas');
+  const drawCtx          = drawCanvas.getContext('2d');
+  const drawCanvasRemote = document.getElementById('draw-canvas-remote');
+  const drawCtxRemote    = drawCanvasRemote.getContext('2d');
+  const drawSvg          = document.getElementById('draw-svg');
+  const shapesListEl     = document.getElementById('shapes-list');
+  const toolHintEl       = document.getElementById('tool-hint');
+
+  // Dimensiona os dois canvas para o mapa (1200×800)
+  drawCanvas.width        = 1200;  drawCanvas.height       = 800;
+  drawCanvasRemote.width  = 1200;  drawCanvasRemote.height = 800;
+
+  // Mapa de traços remotos por userId:  { color, thickness, points[] }
+  const remotePenPaths = new Map();
+
+  // Estado de desenho
+  let activeTool     = 'select';
+  let drawColor      = '#e94560';
+  let drawThickness  = 3;
+  let drawState      = null; // { isDrawing, startX, startY, currentX, currentY }
+
   sidebarUsername.textContent = currentUsername;
 
   // ── 4. Registro de eventos do socket — UMA VEZ ───────────────
@@ -76,9 +98,14 @@
   socket.on('object resized',       (data) => onObjectResized(data));
   socket.on('object deleted',       (data) => onObjectDeleted(data));
   socket.on('object image updated', (data) => onObjectImageUpdated(data));
-  socket.on('background changed',   (data) => onBackgroundChanged(data));
+  socket.on('background changed',       (data) => onBackgroundChanged(data));
+  socket.on('background style updated', (data) => onBackgroundStyleUpdated(data));
   socket.on('dice rolled',          (data) => onDiceRolled(data));
   socket.on('chat message',         (data) => onChatMessage(data));
+  socket.on('shape drawn',          (data) => onShapeDrawn(data));
+  socket.on('drawing deleted',      (data) => onDrawingDeleted(data));
+  socket.on('remote pen stroke',    (data) => onRemotePenStroke(data));
+  socket.on('remote pen end',       (data) => onRemotePenEnd(data));
 
   // ── 5. Ingressa na sala da campanha ──────────────────────────
   socket.emit('join campaign', { campaignSlug });
@@ -107,7 +134,11 @@
 
     // Fundo do mapa
     if (gameState?.background) {
-      map.style.backgroundImage = `url('${gameState.background}')`;
+      applyBackground(gameState.background, gameState.backgroundStyle);
+      if (isMaster) {
+        document.getElementById('bg-controls').classList.remove('hidden');
+        syncBgControlsUI(gameState.backgroundStyle);
+      }
     }
 
     // Limpa e reconstrói objetos
@@ -119,6 +150,18 @@
     // Reconstrói histórico de chat — mensagens são strings "[username]: texto"
     if (Array.isArray(gameState?.messages)) {
       gameState.messages.forEach((msg) => appendChatMessage(null, msg));
+    }
+
+    // Reconstrói formas desenhadas
+    drawSvg.innerHTML = '';
+    shapesListEl.innerHTML = '';
+    if (Array.isArray(gameState?.drawings) && gameState.drawings.length > 0) {
+      gameState.drawings.forEach((d) => {
+        renderShapeInSvg(d);
+        addShapeToList(d);
+      });
+    } else {
+      shapesListEl.innerHTML = '<p class="library-empty">Nenhuma forma ainda.</p>';
     }
   }
 
@@ -157,8 +200,17 @@
     el.style.backgroundImage = `url('${imageUrl}')`;
   }
 
-  function onBackgroundChanged({ imageUrl }) {
-    map.style.backgroundImage = `url('${imageUrl}')`;
+  function onBackgroundChanged({ imageUrl, backgroundStyle }) {
+    applyBackground(imageUrl, backgroundStyle);
+    if (isMaster) {
+      document.getElementById('bg-controls').classList.remove('hidden');
+      syncBgControlsUI(backgroundStyle);
+    }
+  }
+
+  function onBackgroundStyleUpdated({ backgroundStyle }) {
+    applyBackground(null, backgroundStyle); // só atualiza o estilo, preserva a URL
+    if (isMaster) syncBgControlsUI(backgroundStyle);
   }
 
   function onDiceRolled(data) {
@@ -171,6 +223,55 @@
 
   function onChatMessage({ username, text }) {
     appendChatMessage(username, text);
+  }
+
+  function onShapeDrawn({ drawing }) {
+    if (!drawing) return;
+    renderShapeInSvg(drawing);
+    addShapeToList(drawing);
+  }
+
+  function onDrawingDeleted({ drawingId }) {
+    const svgEl = drawSvg.querySelector(`[data-drawing-id="${CSS.escape(String(drawingId))}"]`);
+    if (svgEl) svgEl.remove();
+    const listEl = shapesListEl.querySelector(`[data-drawing-id="${CSS.escape(String(drawingId))}"]`);
+    if (listEl) listEl.remove();
+    if (shapesListEl.children.length === 0) {
+      shapesListEl.innerHTML = '<p class="library-empty">Nenhuma forma ainda.</p>';
+    }
+  }
+
+  function onRemotePenStroke({ userId, x, y, color, thickness, isFirst }) {
+    if (!remotePenPaths.has(userId)) {
+      remotePenPaths.set(userId, { color, thickness, points: [] });
+    }
+    const path = remotePenPaths.get(userId);
+    path.color     = color;
+    path.thickness = thickness;
+    path.points.push({ x, y, isFirst });
+    redrawRemoteCanvas();
+  }
+
+  function onRemotePenEnd({ userId }) {
+    remotePenPaths.delete(userId);
+    redrawRemoteCanvas();
+  }
+
+  function redrawRemoteCanvas() {
+    drawCtxRemote.clearRect(0, 0, drawCanvasRemote.width, drawCanvasRemote.height);
+    remotePenPaths.forEach(({ color, thickness, points }) => {
+      if (points.length < 2) return;
+      drawCtxRemote.strokeStyle = color || '#e94560';
+      drawCtxRemote.lineWidth   = thickness || 3;
+      drawCtxRemote.lineCap     = 'round';
+      drawCtxRemote.lineJoin    = 'round';
+      drawCtxRemote.beginPath();
+      points.forEach(({ x, y, isFirst }, i) => {
+        if (i === 0 || isFirst) drawCtxRemote.moveTo(x, y);
+        else drawCtxRemote.lineTo(x, y);
+      });
+      drawCtxRemote.stroke();
+    });
   }
 
   // ── 7. Criação de elementos de objeto no mapa ─────────────────
@@ -313,29 +414,35 @@
     selectObject(objectId);
   }
 
+  const MAP_W = 1200;
+  const MAP_H = 800;
+
+  function clampPos(x, y, el) {
+    return {
+      x: Math.min(MAP_W - el.offsetWidth,  Math.max(0, x)),
+      y: Math.min(MAP_H - el.offsetHeight, Math.max(0, y)),
+    };
+  }
+
   document.addEventListener('mousemove', (e) => {
     if (!dragState) return;
 
     const { el, objectId, offsetX, offsetY } = dragState;
     const mapRect = map.getBoundingClientRect();
 
-    // Posição relativa ao mapa, em pixels absolutos
-    const x = Math.max(0, e.clientX - mapRect.left - offsetX);
-    const y = Math.max(0, e.clientY - mapRect.top  - offsetY);
+    const raw = {
+      x: e.clientX - mapRect.left - offsetX,
+      y: e.clientY - mapRect.top  - offsetY,
+    };
+    const { x, y } = clampPos(raw.x, raw.y, el);
 
-    // Atualiza visual imediatamente (sem esperar confirmação do servidor)
     el.style.left = `${x}px`;
     el.style.top  = `${y}px`;
 
-    // Throttle: emite no máximo a cada 50 ms
     const now = Date.now();
     if (now - dragState.lastEmit >= 50) {
       dragState.lastEmit = now;
-      socket.emit('move object', {
-        campaignId,
-        objectId,
-        position: { x, y },
-      });
+      socket.emit('move object', { campaignId, objectId, position: { x, y } });
     }
   });
 
@@ -345,17 +452,15 @@
     const { el, objectId, offsetX, offsetY } = dragState;
     const mapRect = map.getBoundingClientRect();
 
-    const x = Math.max(0, e.clientX - mapRect.left - offsetX);
-    const y = Math.max(0, e.clientY - mapRect.top  - offsetY);
+    const raw = {
+      x: e.clientX - mapRect.left - offsetX,
+      y: e.clientY - mapRect.top  - offsetY,
+    };
+    const { x, y } = clampPos(raw.x, raw.y, el);
 
-    // Posição final garantida
     el.style.left = `${x}px`;
     el.style.top  = `${y}px`;
-    socket.emit('move object', {
-      campaignId,
-      objectId,
-      position: { x, y },
-    });
+    socket.emit('move object', { campaignId, objectId, position: { x, y } });
 
     dragState = null;
   });
@@ -386,22 +491,18 @@
 
     const { el, objectId, startX, startY, startW, startH } = resizeState;
 
-    // Calcula tamanho em pixels — NÃO usa coordenadas do mouse diretamente
-    const newW = Math.max(40, startW + (e.clientX - startX));
-    const newH = Math.max(40, startH + (e.clientY - startY));
+    const objLeft = parseInt(el.style.left, 10) || 0;
+    const objTop  = parseInt(el.style.top,  10) || 0;
+    const newW = Math.min(MAP_W - objLeft, Math.max(40, startW + (e.clientX - startX)));
+    const newH = Math.min(MAP_H - objTop,  Math.max(40, startH + (e.clientY - startY)));
 
     el.style.width  = `${newW}px`;
     el.style.height = `${newH}px`;
 
-    // Throttle
     const now = Date.now();
     if (now - resizeState.lastEmit >= 50) {
       resizeState.lastEmit = now;
-      socket.emit('resize object', {
-        campaignId,
-        objectId,
-        size: { width: newW, height: newH },
-      });
+      socket.emit('resize object', { campaignId, objectId, size: { width: newW, height: newH } });
     }
   });
 
@@ -409,16 +510,14 @@
     if (!resizeState) return;
 
     const { el, objectId, startX, startY, startW, startH } = resizeState;
-    const newW = Math.max(40, startW + (e.clientX - startX));
-    const newH = Math.max(40, startH + (e.clientY - startY));
+    const objLeft = parseInt(el.style.left, 10) || 0;
+    const objTop  = parseInt(el.style.top,  10) || 0;
+    const newW = Math.min(MAP_W - objLeft, Math.max(40, startW + (e.clientX - startX)));
+    const newH = Math.min(MAP_H - objTop,  Math.max(40, startH + (e.clientY - startY)));
 
     el.style.width  = `${newW}px`;
     el.style.height = `${newH}px`;
-    socket.emit('resize object', {
-      campaignId,
-      objectId,
-      size: { width: newW, height: newH },
-    });
+    socket.emit('resize object', { campaignId, objectId, size: { width: newW, height: newH } });
 
     resizeState = null;
   });
@@ -459,17 +558,18 @@
     objectImageInput.click();
   }
 
-  objectImageInput.addEventListener('change', () => {
+  objectImageInput.addEventListener('change', async () => {
     const file = objectImageInput.files[0];
     if (!file || !pendingUploadObjectId) return;
-    compressAndReadImage(file, (base64) => {
-      socket.emit('upload object image', {
-        campaignId,
-        objectId: pendingUploadObjectId,
-        imageData: base64,
-      });
-      pendingUploadObjectId = null;
-    });
+    const objectId = pendingUploadObjectId;
+    pendingUploadObjectId = null;
+
+    try {
+      const url = await uploadFileToCloudinary(file);
+      socket.emit('upload object image', { campaignId, objectId, imageUrl: url });
+    } catch (err) {
+      console.error('[object image] upload falhou', err);
+    }
   });
 
   // ── 14. Trocar fundo (mestre) ─────────────────────────────────
@@ -479,13 +579,16 @@
     changeBgInput.click();
   });
 
-  changeBgInput.addEventListener('change', () => {
+  changeBgInput.addEventListener('change', async () => {
     const file = changeBgInput.files[0];
     if (!file) return;
-    // Fundo do mapa pode ser maior: 1920px, qualidade um pouco menor
-    compressAndReadImage(file, (base64) => {
-      socket.emit('change background', { campaignId, imageUrl: base64 });
-    }, 1920, 0.80);
+    try {
+      const url = await uploadFileToCloudinary(file, 1920, 0.80);
+      socket.emit('change background', { campaignId, imageUrl: url });
+      document.getElementById('bg-controls').classList.remove('hidden');
+    } catch (err) {
+      console.error('[background] upload falhou', err);
+    }
   });
 
   // ── 15. Chat ──────────────────────────────────────────────────
@@ -523,7 +626,7 @@
 
   async function loadImageLibrary() {
     try {
-      const res = await fetch('http://localhost:3000/api/users/images', {
+      const res = await fetch(`${window.API_BASE}/api/users/images`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!res.ok) return;
@@ -576,7 +679,7 @@
 
   async function deleteLibraryImage(imageId, wrapEl) {
     try {
-      const res = await fetch(`http://localhost:3000/api/users/images/${imageId}`, {
+      const res = await fetch(`${window.API_BASE}/api/users/images/${imageId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -619,24 +722,60 @@
     const file = libraryUploadInput.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
-      const res = await fetch('http://localhost:3000/api/users/images', {
+      // 1. Faz upload para Cloudinary e obtém URL pública
+      const url = await uploadFileToCloudinary(file);
+
+      // 2. Salva a URL na biblioteca do usuário
+      const res = await fetch(`${window.API_BASE}/api/users/images`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url, name: file.name }),
       });
       if (res.ok) {
         await loadImageLibrary();
       }
-    } catch (_) {
-      // Falha silenciosa
+    } catch (err) {
+      console.error('[library upload] falhou', err);
     }
   });
 
   // ── 17. Utilitários ───────────────────────────────────────────
+
+  /**
+   * Comprime um arquivo de imagem e faz upload para o Cloudinary via backend.
+   * Retorna a URL pública (https://res.cloudinary.com/...).
+   * @param {File}   file     — arquivo selecionado pelo usuário
+   * @param {number} maxPx    — dimensão máxima em pixels (padrão 1024)
+   * @param {number} quality  — qualidade JPEG 0-1 (padrão 0.82)
+   */
+  async function uploadFileToCloudinary(file, maxPx = 1024, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+      compressAndReadImage(file, async (base64) => {
+        try {
+          const res = await fetch(`${window.API_BASE}/api/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ imageData: base64 }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            return reject(new Error(err.error || `Upload failed (${res.status})`));
+          }
+          const { url } = await res.json();
+          resolve(url);
+        } catch (err) {
+          reject(err);
+        }
+      }, maxPx, quality);
+    });
+  }
 
   /**
    * Comprime uma imagem antes de converter para base64.
@@ -686,7 +825,364 @@
     return d.innerHTML;
   }
 
-  // ── 18. Init ──────────────────────────────────────────────────
+  // ── 18. Fundo do mapa — controles ────────────────────────────
+
+  // Estado local do estilo de fundo (referência do mestre)
+  let bgStyle = { fit: 'cover', posX: 50, posY: 50, scale: 100 };
+
+  /**
+   * Aplica background image + style ao #map.
+   * Se url for null/undefined, preserva a backgroundImage atual.
+   */
+  function applyBackground(url, style) {
+    if (url) map.style.backgroundImage = `url('${url}')`;
+
+    const { fit = 'cover', posX = 50, posY = 50, scale = 100 } = style || {};
+    bgStyle = { fit, posX, posY, scale };
+
+    map.style.backgroundPosition = `${posX}% ${posY}%`;
+
+    switch (fit) {
+      case 'cover':
+        map.style.backgroundSize   = 'cover';
+        map.style.backgroundRepeat = 'no-repeat';
+        break;
+      case 'contain':
+        map.style.backgroundSize   = 'contain';
+        map.style.backgroundRepeat = 'no-repeat';
+        break;
+      case 'tile':
+        map.style.backgroundSize   = `${scale}%`;
+        map.style.backgroundRepeat = 'repeat';
+        break;
+      case 'stretch':
+        map.style.backgroundSize   = '100% 100%';
+        map.style.backgroundRepeat = 'no-repeat';
+        break;
+      default:
+        map.style.backgroundSize   = 'cover';
+        map.style.backgroundRepeat = 'no-repeat';
+    }
+  }
+
+  /** Sincroniza os inputs do painel com um objeto de estilo */
+  function syncBgControlsUI(style) {
+    const { fit = 'cover', posX = 50, posY = 50, scale = 100 } = style || {};
+
+    document.querySelectorAll('.bg-fit-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.fit === fit);
+    });
+    const xInput = document.getElementById('bg-pos-x');
+    const yInput = document.getElementById('bg-pos-y');
+    const sInput = document.getElementById('bg-scale');
+    xInput.value = posX;  document.getElementById('bg-pos-x-val').textContent  = `${posX}%`;
+    yInput.value = posY;  document.getElementById('bg-pos-y-val').textContent  = `${posY}%`;
+    sInput.value = scale; document.getElementById('bg-scale-val').textContent  = `${scale}%`;
+
+    // Mostra/esconde a linha de zoom — relevante apenas no modo tile
+    document.getElementById('bg-scale-row').style.display = fit === 'tile' ? '' : 'none';
+  }
+
+  /** Emite o estilo atual para o servidor (throttled) */
+  let bgStyleEmitTimer = null;
+  function emitBgStyle() {
+    clearTimeout(bgStyleEmitTimer);
+    bgStyleEmitTimer = setTimeout(() => {
+      socket.emit('update background style', { campaignId, backgroundStyle: { ...bgStyle } });
+    }, 80);
+  }
+
+  // Botões de fit
+  document.querySelectorAll('.bg-fit-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      bgStyle.fit = btn.dataset.fit;
+      syncBgControlsUI(bgStyle);
+      applyBackground(null, bgStyle);
+      emitBgStyle();
+    });
+  });
+
+  // Slider de posição X
+  const bgPosXInput = document.getElementById('bg-pos-x');
+  bgPosXInput.addEventListener('input', () => {
+    bgStyle.posX = Number(bgPosXInput.value);
+    document.getElementById('bg-pos-x-val').textContent = `${bgStyle.posX}%`;
+    applyBackground(null, bgStyle);
+    emitBgStyle();
+  });
+
+  // Slider de posição Y
+  const bgPosYInput = document.getElementById('bg-pos-y');
+  bgPosYInput.addEventListener('input', () => {
+    bgStyle.posY = Number(bgPosYInput.value);
+    document.getElementById('bg-pos-y-val').textContent = `${bgStyle.posY}%`;
+    applyBackground(null, bgStyle);
+    emitBgStyle();
+  });
+
+  // Slider de escala (tile)
+  const bgScaleInput = document.getElementById('bg-scale');
+  bgScaleInput.addEventListener('input', () => {
+    bgStyle.scale = Number(bgScaleInput.value);
+    document.getElementById('bg-scale-val').textContent = `${bgStyle.scale}%`;
+    applyBackground(null, bgStyle);
+    emitBgStyle();
+  });
+
+  // ── 19. Sistema de Desenho ────────────────────────────────────
+
+  const TOOL_HINTS = {
+    select: 'Selecionar: clique e arraste objetos',
+    pen:    'Caneta Mágica: desenhe livremente — desaparece ao soltar',
+    circle: 'Círculo: clique e arraste para definir o tamanho',
+    rect:   'Retângulo: clique e arraste para definir o tamanho',
+  };
+
+  function setActiveTool(tool) {
+    activeTool = tool;
+    document.querySelectorAll('.tool-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.tool === tool);
+    });
+    const drawing = tool !== 'select';
+    drawCanvas.style.pointerEvents = drawing ? 'all' : 'none';
+    map.style.cursor = drawing ? 'crosshair' : '';
+    if (toolHintEl) toolHintEl.textContent = TOOL_HINTS[tool] || '';
+  }
+
+  // Botões da toolbar
+  document.querySelectorAll('.tool-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setActiveTool(btn.dataset.tool));
+  });
+
+  // Cor e espessura
+  document.getElementById('draw-color').addEventListener('input', (e) => {
+    drawColor = e.target.value;
+  });
+  const thicknessInput = document.getElementById('draw-thickness');
+  const thicknessVal   = document.getElementById('draw-thickness-val');
+  thicknessInput.addEventListener('input', () => {
+    drawThickness = parseInt(thicknessInput.value, 10);
+    thicknessVal.textContent = `${drawThickness}px`;
+  });
+
+  // Tecla Esc volta para select
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setActiveTool('select');
+  });
+
+  // ── Coordenadas relativas ao canvas ───────────────────────
+  function getCanvasPos(e) {
+    const rect = drawCanvas.getBoundingClientRect();
+    const scaleX = drawCanvas.width  / rect.width;
+    const scaleY = drawCanvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top)  * scaleY,
+    };
+  }
+
+  // ── Caneta mágica: estilo de contexto ─────────────────────
+  function applyPenStyle() {
+    drawCtx.strokeStyle = drawColor;
+    drawCtx.lineWidth   = drawThickness;
+    drawCtx.lineCap     = 'round';
+    drawCtx.lineJoin    = 'round';
+  }
+
+  // ── Mousedown ─────────────────────────────────────────────
+  drawCanvas.addEventListener('mousedown', (e) => {
+    if (activeTool === 'select') return;
+    const pos = getCanvasPos(e);
+    drawState = { isDrawing: true, startX: pos.x, startY: pos.y, currentX: pos.x, currentY: pos.y };
+
+    if (activeTool === 'pen') {
+      applyPenStyle();
+      drawCtx.beginPath();
+      drawCtx.moveTo(pos.x, pos.y);
+      // Emite ponto inicial para os outros
+      socket.emit('pen stroke', { campaignId, x: pos.x, y: pos.y, color: drawColor, thickness: drawThickness, isFirst: true });
+    }
+  });
+
+  // ── Mousemove ─────────────────────────────────────────────
+  drawCanvas.addEventListener('mousemove', (e) => {
+    if (!drawState?.isDrawing) return;
+    const pos = getCanvasPos(e);
+    drawState.currentX = pos.x;
+    drawState.currentY = pos.y;
+
+    if (activeTool === 'pen') {
+      drawCtx.lineTo(pos.x, pos.y);
+      drawCtx.stroke();
+      // Emite cada ponto para os outros
+      socket.emit('pen stroke', { campaignId, x: pos.x, y: pos.y, color: drawColor, thickness: drawThickness, isFirst: false });
+    } else {
+      // Preview de forma
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      drawCtx.strokeStyle = drawColor;
+      drawCtx.lineWidth   = drawThickness;
+      drawCtx.setLineDash([6, 3]);
+
+      if (activeTool === 'circle') {
+        const cx = (drawState.startX + pos.x) / 2;
+        const cy = (drawState.startY + pos.y) / 2;
+        const rx = Math.abs(pos.x - drawState.startX) / 2;
+        const ry = Math.abs(pos.y - drawState.startY) / 2;
+        drawCtx.beginPath();
+        drawCtx.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
+        drawCtx.stroke();
+      } else if (activeTool === 'rect') {
+        drawCtx.beginPath();
+        drawCtx.strokeRect(
+          drawState.startX,
+          drawState.startY,
+          pos.x - drawState.startX,
+          pos.y - drawState.startY,
+        );
+      }
+      drawCtx.setLineDash([]);
+    }
+  });
+
+  // ── Mouseup ───────────────────────────────────────────────
+  drawCanvas.addEventListener('mouseup', (e) => {
+    if (!drawState?.isDrawing) return;
+    const pos = getCanvasPos(e);
+    drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+
+    if (activeTool === 'pen') {
+      // Efêmero: limpa e avisa os outros que acabou
+      socket.emit('pen end', { campaignId });
+      drawState = null;
+      return;
+    }
+
+    const MIN_SIZE = 8;
+    let drawing = null;
+
+    if (activeTool === 'circle') {
+      const rx = Math.abs(pos.x - drawState.startX) / 2;
+      const ry = Math.abs(pos.y - drawState.startY) / 2;
+      if (rx < MIN_SIZE || ry < MIN_SIZE) { drawState = null; return; }
+      drawing = {
+        id:          genDrawingId(),
+        type:        'circle',
+        cx:          (drawState.startX + pos.x) / 2,
+        cy:          (drawState.startY + pos.y) / 2,
+        rx, ry,
+        color:       drawColor,
+        strokeWidth: drawThickness,
+        creatorId:   currentUserId,
+      };
+    } else if (activeTool === 'rect') {
+      const w = Math.abs(pos.x - drawState.startX);
+      const h = Math.abs(pos.y - drawState.startY);
+      if (w < MIN_SIZE || h < MIN_SIZE) { drawState = null; return; }
+      drawing = {
+        id:          genDrawingId(),
+        type:        'rect',
+        x:           Math.min(drawState.startX, pos.x),
+        y:           Math.min(drawState.startY, pos.y),
+        w, h,
+        color:       drawColor,
+        strokeWidth: drawThickness,
+        creatorId:   currentUserId,
+      };
+    }
+
+    if (drawing) {
+      socket.emit('draw shape', { campaignId, drawing });
+    }
+    drawState = null;
+  });
+
+  // Sai do canvas sem soltar o mouse → limpa
+  drawCanvas.addEventListener('mouseleave', () => {
+    if (drawState?.isDrawing) {
+      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      if (activeTool === 'pen') socket.emit('pen end', { campaignId });
+      drawState = null;
+    }
+  });
+
+  // ── Renderiza forma no SVG ─────────────────────────────────
+  function renderShapeInSvg(drawing) {
+    const NS = 'http://www.w3.org/2000/svg';
+    let el;
+
+    if (drawing.type === 'circle') {
+      el = document.createElementNS(NS, 'ellipse');
+      el.setAttribute('cx', drawing.cx);
+      el.setAttribute('cy', drawing.cy);
+      el.setAttribute('rx', drawing.rx || 10);
+      el.setAttribute('ry', drawing.ry || 10);
+    } else if (drawing.type === 'rect') {
+      el = document.createElementNS(NS, 'rect');
+      el.setAttribute('x', drawing.x);
+      el.setAttribute('y', drawing.y);
+      el.setAttribute('width',  drawing.w || 20);
+      el.setAttribute('height', drawing.h || 20);
+      el.setAttribute('rx', 2);
+    }
+
+    if (!el) return;
+    el.setAttribute('stroke',         drawing.color       || '#e94560');
+    el.setAttribute('stroke-width',   drawing.strokeWidth || 3);
+    el.setAttribute('fill',           'none');
+    el.setAttribute('opacity',        '0.85');
+    el.dataset.drawingId = drawing.id;
+    el.dataset.creatorId = drawing.creatorId || '';
+    drawSvg.appendChild(el);
+  }
+
+  // ── Adiciona forma à lista da sidebar ─────────────────────
+  function addShapeToList(drawing) {
+    const emptyEl = shapesListEl.querySelector('.library-empty');
+    if (emptyEl) emptyEl.remove();
+
+    const canDelete = isMaster || drawing.creatorId === currentUserId;
+    const icon  = drawing.type === 'circle' ? '○' : '□';
+    const label = drawing.type === 'circle' ? 'Círculo' : 'Retângulo';
+
+    const row = document.createElement('div');
+    row.className = 'shape-list-item';
+    row.dataset.drawingId = drawing.id;
+
+    const iconEl = document.createElement('span');
+    iconEl.className = 'shape-list-icon';
+    iconEl.textContent = icon;
+
+    const swatch = document.createElement('span');
+    swatch.className = 'shape-list-swatch';
+    swatch.style.background = drawing.color || '#e94560';
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'shape-list-label';
+    labelEl.textContent = label;
+
+    row.appendChild(iconEl);
+    row.appendChild(swatch);
+    row.appendChild(labelEl);
+
+    if (canDelete) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'shape-list-delete';
+      delBtn.title = 'Remover forma';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => {
+        socket.emit('delete drawing', { campaignId, drawingId: drawing.id });
+      });
+      row.appendChild(delBtn);
+    }
+
+    shapesListEl.appendChild(row);
+  }
+
+  function genDrawingId() {
+    return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  }
+
+  // ── 19. Init ──────────────────────────────────────────────────
   loadImageLibrary();
 
 })();

@@ -3,7 +3,7 @@
  * Tela: campaigns.html
  */
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = window.API_BASE;
 
 // ── Verificação de autenticação ──────────────────────────────
 const token = localStorage.getItem('jwt');

@@ -9,7 +9,7 @@
   const token = localStorage.getItem('jwt');
   if (!token) { window.location.href = 'index.html'; return; }
 
-  const SERVER_URL = 'http://localhost:3000';
+  const SERVER_URL = window.API_BASE;
 
   const socket = io(SERVER_URL, {
     auth: { token },
