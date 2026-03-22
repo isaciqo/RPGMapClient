@@ -176,11 +176,15 @@
       var sio = document.createElement('script');
       sio.src = window.API_BASE + '/socket.io/socket.io.js';
       sio.onload = function () {
-        ['js/socket.js', 'js/dice.js', 'js/game.js'].forEach(function (src) {
+        var scripts = ['js/socket.js', 'js/dice.js', 'js/game.js'];
+        function loadNext(i) {
+          if (i >= scripts.length) return;
           var s = document.createElement('script');
-          s.src = src;
+          s.src = scripts[i];
+          s.onload = function () { loadNext(i + 1); };
           document.body.appendChild(s);
-        });
+        }
+        loadNext(0);
       };
       sio.onerror = function () {
         console.error('[config] Falha ao carregar socket.io.js de ' + sio.src);
